@@ -1,5 +1,6 @@
 // lib/services/app_provider.dart
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../models/transaction_model.dart';
 import 'auth_service.dart';
@@ -19,8 +20,8 @@ class AppProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  bool get isLoggedIn =>
-      _authService.currentUser != null && _currentUser != null;
+  bool get isFirebaseLoggedIn => _authService.currentUser != null;
+  bool get isLoggedIn => _authService.currentUser != null && _currentUser != null;
 
   void setLoading(bool val) {
     _isLoading = val;
@@ -32,7 +33,19 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Listen to user stream
+  // Нэвтрэлтийн цагийг хадгална
+  Future<void> _saveLoginTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+        'last_login_time', DateTime.now().millisecondsSinceEpoch);
+  }
+
+  // Session цагийг шалгаж цэвэрлэнэ
+  Future<void> _clearLoginTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('last_login_time');
+  }
+
   void listenToUser() {
     _authService.userStream().listen((user) {
       _currentUser = user;
@@ -40,7 +53,6 @@ class AppProvider extends ChangeNotifier {
     });
   }
 
-  // Listen to transactions
   void listenToTransactions() {
     if (_authService.currentUser == null) return;
     _transactionService
@@ -51,13 +63,25 @@ class AppProvider extends ChangeNotifier {
     });
   }
 
+  // Апп дахин нээгдэхэд user-ийг reload хийнэ
+  Future<void> reloadUser() async {
+    if (_authService.currentUser == null) return;
+    _currentUser = await _authService.getCurrentUserModel();
+    listenToUser();
+    listenToTransactions();
+    // Session цагийг шинэчилнэ
+    await _saveLoginTime();
+    notifyListeners();
+  }
+
   Future<bool> register(String name, String email, String password) async {
     setLoading(true);
     setError(null);
     try {
-      final user =
-          await _authService.register(name: name, email: email, password: password);
+      final user = await _authService.register(
+          name: name, email: email, password: password);
       _currentUser = user;
+      await _saveLoginTime();
       listenToUser();
       listenToTransactions();
       setLoading(false);
@@ -73,8 +97,10 @@ class AppProvider extends ChangeNotifier {
     setLoading(true);
     setError(null);
     try {
-      final user = await _authService.login(email: email, password: password);
+      final user =
+      await _authService.login(email: email, password: password);
       _currentUser = user;
+      await _saveLoginTime();
       listenToUser();
       listenToTransactions();
       setLoading(false);
@@ -87,6 +113,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    await _clearLoginTime();
     await _authService.signOut();
     _currentUser = null;
     _transactions = [];
@@ -124,7 +151,8 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> topUpWallet(double amount) async {
     if (_authService.currentUser == null) return;
-    await _transactionService.topUpWallet(_authService.currentUser!.uid, amount);
+    await _transactionService.topUpWallet(
+        _authService.currentUser!.uid, amount);
   }
 
   Future<void> deleteTransaction(TransactionModel txn) async {

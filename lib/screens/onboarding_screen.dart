@@ -82,7 +82,7 @@ class OnboardingScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Илүү Хэмнээ',
+                          'Илүү Хэмнэ',
                           style: GoogleFonts.notoSans(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
@@ -122,7 +122,7 @@ class OnboardingScreen extends StatelessWidget {
                   ElevatedButton(
                     onPressed: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
                     ),
                     child: Text(
                       'Эхлэх',
