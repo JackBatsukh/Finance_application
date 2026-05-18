@@ -5,6 +5,7 @@ import '../models/user_model.dart';
 import '../models/transaction_model.dart';
 import 'auth_service.dart';
 import 'transaction_service.dart';
+export 'transaction_service.dart' show InsufficientBalanceException;
 
 class AppProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -120,7 +121,7 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> addTransaction({
+  Future<({bool success, bool insufficientBalance, String? error})> addTransaction({
     required String title,
     required double amount,
     required TransactionType type,
@@ -128,7 +129,9 @@ class AppProvider extends ChangeNotifier {
     required DateTime date,
     String? note,
   }) async {
-    if (_authService.currentUser == null) return false;
+    if (_authService.currentUser == null) {
+      return (success: false, insufficientBalance: false, error: 'Нэвтрээгүй байна');
+    }
     setLoading(true);
     try {
       await _transactionService.addTransaction(
@@ -141,11 +144,21 @@ class AppProvider extends ChangeNotifier {
         note: note,
       );
       setLoading(false);
-      return true;
+      return (success: true, insufficientBalance: false, error: null);
+    } on InsufficientBalanceException catch (e) {
+      setLoading(false);
+      return (
+      success: false,
+      insufficientBalance: true,
+      error: 'Үлдэгдэл хүрэлцэхгүй байна!\n'
+          'Данс: \$${e.balance.toStringAsFixed(2)}\n'
+          'Зарлага: \$${e.requested.toStringAsFixed(2)}\n'
+          'Дутагдал: \$${e.shortage.toStringAsFixed(2)}',
+      );
     } catch (e) {
       setError(e.toString());
       setLoading(false);
-      return false;
+      return (success: false, insufficientBalance: false, error: e.toString());
     }
   }
 

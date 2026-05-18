@@ -2,7 +2,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 import '../models/transaction_model.dart';
-import '../models/user_model.dart';
 
 class TransactionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -14,9 +13,8 @@ class TransactionService {
         .where('userId', isEqualTo: userId)
         .orderBy('date', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => TransactionModel.fromMap(doc.data()))
-            .toList());
+        .map((snap) =>
+        snap.docs.map((d) => TransactionModel.fromMap(d.data())).toList());
   }
 
   Future<TransactionModel> addTransaction({
@@ -29,9 +27,28 @@ class TransactionService {
     String? note,
     String? receiptUrl,
   }) async {
+    // ── Үлдэгдэл шалгалт ──────────────────────────────────────
+    if (type == TransactionType.expense) {
+      final userDoc =
+      await _firestore.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        final balance =
+        (userDoc.data()!['walletBalance'] ?? 0).toDouble();
+        if (amount > balance) {
+          throw InsufficientBalanceException(
+            balance: balance,
+            requested: amount,
+          );
+        }
+      }
+    }
+
+    // ── Гүйлгээ үүсгэх ────────────────────────────────────────
     final id = _uuid.v4();
     final qrData =
-        'TXN:$id|USER:$userId|TITLE:$title|AMT:$amount|TYPE:${type == TransactionType.income ? "income" : "expense"}|DATE:${date.toIso8601String()}';
+        'TXN:$id|USER:$userId|TITLE:$title|AMT:$amount'
+        '|TYPE:${type == TransactionType.income ? "income" : "expense"}'
+        '|DATE:${date.toIso8601String()}';
 
     final transaction = TransactionModel(
       id: id,
@@ -51,21 +68,17 @@ class TransactionService {
         .doc(id)
         .set(transaction.toMap());
 
-    // Update user balance
     await _updateUserBalance(userId, amount, type);
-
     return transaction;
   }
 
   Future<void> _updateUserBalance(
       String userId, double amount, TransactionType type) async {
     final userRef = _firestore.collection('users').doc(userId);
-
     return _firestore.runTransaction((txn) async {
-      final snapshot = await txn.get(userRef);
-      if (!snapshot.exists) return;
-
-      final data = snapshot.data()!;
+      final snap = await txn.get(userRef);
+      if (!snap.exists) return;
+      final data = snap.data()!;
       double balance = (data['walletBalance'] ?? 0).toDouble();
       double totalIncome = (data['totalIncome'] ?? 0).toDouble();
       double totalExpense = (data['totalExpense'] ?? 0).toDouble();
@@ -91,8 +104,7 @@ class TransactionService {
         .collection('transactions')
         .doc(transaction.id)
         .delete();
-
-    // Reverse balance update
+    // Балансыг буцаана
     await _updateUserBalance(
       transaction.userId,
       transaction.amount,
@@ -102,7 +114,6 @@ class TransactionService {
     );
   }
 
-  // Top up wallet
   Future<void> topUpWallet(String userId, double amount) async {
     final id = _uuid.v4();
     final transaction = TransactionModel(
@@ -113,15 +124,30 @@ class TransactionService {
       type: TransactionType.income,
       category: 'Түрүүвч',
       date: DateTime.now(),
-      qrData:
-          'TOPUP:$id|USER:$userId|AMT:$amount|DATE:${DateTime.now().toIso8601String()}',
+      qrData: 'TOPUP:$id|USER:$userId|AMT:$amount'
+          '|DATE:${DateTime.now().toIso8601String()}',
     );
-
     await _firestore
         .collection('transactions')
         .doc(id)
         .set(transaction.toMap());
-
     await _updateUserBalance(userId, amount, TransactionType.income);
   }
+}
+
+// ── Custom Exception ──────────────────────────────────────────
+class InsufficientBalanceException implements Exception {
+  final double balance;
+  final double requested;
+
+  InsufficientBalanceException({
+    required this.balance,
+    required this.requested,
+  });
+
+  double get shortage => requested - balance;
+
+  @override
+  String toString() =>
+      'InsufficientBalanceException: balance=$balance, requested=$requested';
 }

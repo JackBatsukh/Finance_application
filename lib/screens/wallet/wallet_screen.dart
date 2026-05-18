@@ -802,8 +802,8 @@ class _WalletScreenState extends State<WalletScreen>
   }
 
   // BillDetail руу шилжинэ
-  void _openBillDetail(PendingBill bill) async {
-    final paid = await Navigator.push<bool>(
+  void _openBillDetail(PendingBill bill) {
+    Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => BillDetailScreen(
@@ -811,13 +811,10 @@ class _WalletScreenState extends State<WalletScreen>
           cards: _cards,
         ),
       ),
-    );
-    if (paid == true) {
-      setState(() {
-        final idx = _pendingBills.indexWhere((b) => b.id == bill.id);
-        if (idx != -1) _pendingBills[idx].isPaid = true;
-      });
-    }
+    ).then((_) {
+      // Буцаж ирэхэд төлбөр төлсөн бол pending-с хасна
+      setState(() {});
+    });
   }
 
   // ── Helpers ───────────────────────────────────────────────────

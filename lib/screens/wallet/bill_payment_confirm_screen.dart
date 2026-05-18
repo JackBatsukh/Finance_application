@@ -43,8 +43,58 @@ class _BillPaymentConfirmScreenState extends State<BillPaymentConfirmScreen> {
   Future<void> _processPayment() async {
     setState(() => _isProcessing = true);
 
+    final provider = context.read<AppProvider>();
+
+    // Үлдэгдэл шалгана
+    final balance = provider.currentUser?.walletBalance ?? 0;
+    if (widget.bill.total > balance) {
+      setState(() => _isProcessing = false);
+      final fmt = NumberFormat('#,##0.00', 'en_US');
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
+          title: Row(children: [
+            const Icon(Icons.warning_rounded, color: AppColors.expense),
+            const SizedBox(width: 8),
+            Text('Үлдэгдэл дутмаг',
+                style: GoogleFonts.notoSans(fontWeight: FontWeight.bold)),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _infoRow('Данс', '\$${fmt.format(balance)}', Colors.green),
+              const SizedBox(height: 8),
+              _infoRow('Төлбөр', '\$${fmt.format(widget.bill.total)}',
+                  AppColors.expense),
+              const SizedBox(height: 8),
+              _infoRow('Дутагдал',
+                  '\$${fmt.format(widget.bill.total - balance)}',
+                  Colors.orange),
+              const SizedBox(height: 12),
+              Text('Түрүүвчээ цэнэглэсний дараа дахин оролдоно уу.',
+                  style: GoogleFonts.notoSans(
+                      fontSize: 13, color: AppColors.textSecondary)),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary),
+              child: Text('Ойлголоо',
+                  style: GoogleFonts.notoSans(
+                      fontWeight: FontWeight.bold, color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     // Firebase-д хадгална
-    await context.read<AppProvider>().addTransaction(
+    await provider.addTransaction(
       title: widget.bill.title,
       amount: widget.bill.total,
       type: TransactionType.expense,
@@ -58,6 +108,17 @@ class _BillPaymentConfirmScreenState extends State<BillPaymentConfirmScreen> {
       _isPaid = true;
       _paidAt = DateTime.now();
     });
+  }
+
+  Widget _infoRow(String label, String value, Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: GoogleFonts.notoSans(color: AppColors.textSecondary)),
+        Text(value, style: GoogleFonts.notoSans(
+            fontWeight: FontWeight.bold, color: color)),
+      ],
+    );
   }
 
   @override
